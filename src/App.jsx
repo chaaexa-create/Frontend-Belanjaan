@@ -3,7 +3,7 @@ import axios from 'axios'
 import { Moon, Plus, Pencil, Trash2, Sun } from 'lucide-react'
 import echo from './echo'
 
-const api = axios.create({ baseURL: import.meta.env.backend-belanjaan-production.up.railway.app/api })
+const api = axios.create({ baseURL: 'https://backend-belanjaan-production.up.railway.app/api' })
 const PER_PAGE = 10
 
 function formatRupiah(n) {
