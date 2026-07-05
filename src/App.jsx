@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 import { Moon, Plus, Pencil, Trash2, Sun } from 'lucide-react'
+import Swal from 'sweetalert2'
 import echo from './echo'
+
+const toast = Swal.mixin({
+  toast: true,
+  position: 'top-end',
+  showConfirmButton: false,
+  timer: 2000,
+  timerProgressBar: true,
+})
 
 const api = axios.create({ baseURL: 'https://backend-belanjaan-production.up.railway.app/api' })
 const PER_PAGE = 10
@@ -66,10 +75,11 @@ function App() {
 
   const [newForm, setNewForm] = useState({ nama_barang: '', harga: '' })
   const [editingId, setEditingId] = useState(null)
-  const [editForm, setEditForm] = useState({ nama_barang: '', harga_estimasi: '' })
+  const [editForm, setEditForm] = useState({ nama_barang: '', harga_final: '' })
   const [confirmHarga, setConfirmHarga] = useState({})
 
-  const [selectedIds, setSelectedIds] = useState([])
+  const [selectedBelumBeliIds, setSelectedBelumBeliIds] = useState([])
+  const [selectedSudahBeliIds, setSelectedSudahBeliIds] = useState([])
   const [belumPage, setBelumPage] = useState(1)
   const [sudahPage, setSudahPage] = useState(1)
 
@@ -132,27 +142,46 @@ function App() {
     e.preventDefault()
     if (!newForm.nama_barang.trim()) return
 
+    const { isConfirmed } = await Swal.fire({
+      title: `Ingin menambahkan ${newForm.nama_barang}?`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'OK',
+      cancelButtonText: 'Batal',
+    })
+    if (!isConfirmed) return
+
     const payload = { nama_barang: newForm.nama_barang }
     if (newForm.harga && Number(newForm.harga) > 0) {
-      payload.harga_estimasi = Number(newForm.harga)
       payload.harga_final = Number(newForm.harga)
     }
 
     await api.post('/barang', payload)
     setNewForm({ nama_barang: '', harga: '' })
+    toast.fire({ icon: 'success', title: 'Data berhasil ditambahkan!' })
   }
 
   function startEdit(barang) {
     setEditingId(barang.id)
-    setEditForm({ nama_barang: barang.nama_barang, harga_estimasi: String(barang.harga_estimasi) })
+    setEditForm({ nama_barang: barang.nama_barang, harga_final: barang.harga_final ?? '' })
   }
 
-  async function saveEdit(id) {
+  async function saveEdit(barang) {
+    const { isConfirmed } = await Swal.fire({
+      title: `Ingin mengubah data ${barang.nama_barang}?`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'OK',
+      cancelButtonText: 'Batal',
+    })
+    if (!isConfirmed) return
+
     const payload = {}
     if (editForm.nama_barang.trim()) payload.nama_barang = editForm.nama_barang
-    if (editForm.harga_estimasi) payload.harga_estimasi = Number(editForm.harga_estimasi)
-    await api.patch(`/barang/${id}`, payload)
+    if (barang.is_dibeli && editForm.harga_final) payload.harga_final = Number(editForm.harga_final)
+    await api.patch(`/barang/${barang.id}`, payload)
     setEditingId(null)
+    toast.fire({ icon: 'success', title: 'Data berhasil diubah!' })
   }
 
   function startConfirm(id) {
@@ -171,6 +200,7 @@ function App() {
       delete next[barang.id]
       return next
     })
+    toast.fire({ icon: 'success', title: 'Barang berhasil dibeli!' })
   }
 
   function cancelConfirm(id) {
@@ -181,32 +211,74 @@ function App() {
     })
   }
 
-  async function handleDelete(id) {
-    await api.delete(`/barang/${id}`)
+  async function handleDelete(barang) {
+    const { isConfirmed } = await Swal.fire({
+      title: `Ingin menghapus ${barang.nama_barang}?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'OK',
+      cancelButtonText: 'Batal',
+      confirmButtonColor: '#dc2626',
+    })
+    if (!isConfirmed) return
+
+    await api.delete(`/barang/${barang.id}`)
+    toast.fire({ icon: 'success', title: 'Data berhasil dihapus!' })
   }
 
-  function toggleSelect(id) {
-    setSelectedIds((prev) =>
+  function toggleSelect(id, section) {
+    const setter = section === 'belum' ? setSelectedBelumBeliIds : setSelectedSudahBeliIds
+    setter((prev) =>
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
     )
   }
 
-  function toggleSelectAll(ids) {
-    if (ids.every((id) => selectedIds.includes(id))) {
-      setSelectedIds((prev) => prev.filter((id) => !ids.includes(id)))
+  function toggleSelectAll(ids, section) {
+    const selected = section === 'belum' ? selectedBelumBeliIds : selectedSudahBeliIds
+    const setter = section === 'belum' ? setSelectedBelumBeliIds : setSelectedSudahBeliIds
+    if (ids.every((id) => selected.includes(id))) {
+      setter((prev) => prev.filter((id) => !ids.includes(id)))
     } else {
-      setSelectedIds((prev) => [...new Set([...prev, ...ids])])
+      setter((prev) => [...new Set([...prev, ...ids])])
     }
   }
 
-  async function handleDeleteSelected() {
+  async function handleDeleteSelected(section) {
+    const selectedIds = section === 'belum' ? selectedBelumBeliIds : selectedSudahBeliIds
+    const setter = section === 'belum' ? setSelectedBelumBeliIds : setSelectedSudahBeliIds
+    const count = selectedIds.length
+
+    const { isConfirmed } = await Swal.fire({
+      title: `Ingin menghapus ${count} barang yang terpilih?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'OK',
+      cancelButtonText: 'Batal',
+      confirmButtonColor: '#dc2626',
+    })
+    if (!isConfirmed) return
+
     await Promise.all(selectedIds.map((id) => api.delete(`/barang/${id}`)))
-    setSelectedIds([])
+    setter([])
+    toast.fire({ icon: 'success', title: 'Data berhasil dihapus!' })
   }
 
-  async function handleDeleteAll(ids) {
+  async function handleDeleteAll(ids, section) {
+    const setter = section === 'belum' ? setSelectedBelumBeliIds : setSelectedSudahBeliIds
+
+    const { isConfirmed } = await Swal.fire({
+      title: 'Ingin menghapus semua barang di daftar ini?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'OK',
+      cancelButtonText: 'Batal',
+      confirmButtonColor: '#dc2626',
+    })
+    if (!isConfirmed) return
+
     await Promise.all(ids.map((id) => api.delete(`/barang/${id}`)))
-    setSelectedIds([])
+    setter([])
+    toast.fire({ icon: 'success', title: 'Data berhasil dihapus!' })
   }
 
   if (loading) {
@@ -230,12 +302,13 @@ function App() {
     </button>
   )
 
-  function renderBulkBar(ids, label) {
+  function renderBulkBar(ids, section) {
     if (ids.length === 0) return null
+    const selectedIds = section === 'belum' ? selectedBelumBeliIds : selectedSudahBeliIds
     return (
       <div className="flex items-center gap-2 mb-3">
         <button
-          onClick={() => handleDeleteAll(ids)}
+          onClick={() => handleDeleteAll(ids, section)}
           className={`flex items-center gap-1.5 text-xs font-semibold ${dark ? 'text-red-400 bg-red-900/30 hover:bg-red-900/50' : 'text-red-600 bg-red-50 hover:bg-red-100'} px-3 py-1.5 rounded-xl transition cursor-pointer`}
         >
           <Trash2 size={14} />
@@ -243,7 +316,7 @@ function App() {
         </button>
         {selectedIds.length > 0 && (
           <button
-            onClick={handleDeleteSelected}
+            onClick={() => handleDeleteSelected(section)}
             className={`flex items-center gap-1.5 text-xs font-semibold ${dark ? 'text-red-400 bg-red-900/30 hover:bg-red-900/50' : 'text-red-600 bg-red-50 hover:bg-red-100'} px-3 py-1.5 rounded-xl transition cursor-pointer`}
           >
             <Trash2 size={14} />
@@ -254,25 +327,27 @@ function App() {
     )
   }
 
-  function renderSelectCheckbox(id) {
+  function renderSelectCheckbox(id, section) {
+    const selectedIds = section === 'belum' ? selectedBelumBeliIds : selectedSudahBeliIds
     return (
       <input
         type="checkbox"
         checked={selectedIds.includes(id)}
-        onChange={() => toggleSelect(id)}
+        onChange={() => toggleSelect(id, section)}
         className={`w-4 h-4 rounded ${dark ? 'border-slate-600' : 'border-slate-300'} text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600`}
       />
     )
   }
 
-  function renderSelectAllCheckbox(ids) {
+  function renderSelectAllCheckbox(ids, section) {
     if (ids.length === 0) return null
+    const selectedIds = section === 'belum' ? selectedBelumBeliIds : selectedSudahBeliIds
     const allSelected = ids.every((id) => selectedIds.includes(id))
     return (
       <input
         type="checkbox"
         checked={allSelected}
-        onChange={() => toggleSelectAll(ids)}
+        onChange={() => toggleSelectAll(ids, section)}
         className={`w-4 h-4 rounded ${dark ? 'border-slate-600' : 'border-slate-300'} text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600`}
       />
     )
@@ -359,11 +434,11 @@ function App() {
 
                 {renderBulkBar(
                   belumCurrent.map((b) => b.id),
-                  'Belum Dibeli',
+                  'belum',
                 )}
 
                 <div className="flex items-center gap-2 mb-3">
-                  {renderSelectAllCheckbox(belumCurrent.map((b) => b.id))}
+                  {renderSelectAllCheckbox(belumCurrent.map((b) => b.id), 'belum')}
                   {belumCurrent.length > 0 && (
                     <span className={`text-xs ${dark ? 'text-slate-500' : 'text-slate-400'}`}>Pilih semua</span>
                   )}
@@ -392,11 +467,11 @@ function App() {
                           </div>
                         ) : (
                           <>
-                            {renderSelectCheckbox(barang.id)}
+                            {renderSelectCheckbox(barang.id, 'belum')}
                             <button onClick={() => startConfirm(barang.id)} className={`w-5 h-5 rounded-md border-2 ${dark ? 'border-slate-600' : 'border-slate-300'} hover:border-green-400 transition flex-shrink-0 cursor-pointer`} />
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium ${dark ? 'text-white' : 'text-slate-800'} truncate">{barang.nama_barang}</p>
-                              <p className="text-xs ${dark ? 'text-slate-500' : 'text-slate-400'}">{formatRupiah(barang.harga_estimasi)}</p>
+
                             </div>
                             <div className="flex items-center gap-1">
                               {editingId === barang.id ? (
@@ -406,14 +481,16 @@ function App() {
                                     onChange={(e) => setEditForm((f) => ({ ...f, nama_barang: e.target.value }))}
                                     className={`w-24 border ${dark ? 'border-slate-600' : 'border-slate-200'} rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/30 ${dark ? 'bg-slate-700 text-white' : 'bg-slate-50 text-slate-800'}`}
                                   />
-                                  <input
-                                    type="number"
-                                    value={editForm.harga_estimasi}
-                                    onChange={(e) => setEditForm((f) => ({ ...f, harga_estimasi: e.target.value }))}
-                                    className={`w-20 border ${dark ? 'border-slate-600' : 'border-slate-200'} rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/30 ${dark ? 'bg-slate-700 text-white' : 'bg-slate-50 text-slate-800'}`}
-                                    min="0"
-                                  />
-                                  <button onClick={() => saveEdit(barang.id)} className="text-green-600 text-xs font-semibold cursor-pointer">Simpan</button>
+                                  {barang.is_dibeli && (
+                                    <input
+                                      type="number"
+                                      value={editForm.harga_final}
+                                      onChange={(e) => setEditForm((f) => ({ ...f, harga_final: e.target.value }))}
+                                      className={`w-20 border ${dark ? 'border-slate-600' : 'border-slate-200'} rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/30 ${dark ? 'bg-slate-700 text-white' : 'bg-slate-50 text-slate-800'}`}
+                                      min="0"
+                                    />
+                                  )}
+                                  <button onClick={() => saveEdit(barang)} className="text-green-600 text-xs font-semibold cursor-pointer">Simpan</button>
                                   <button onClick={() => setEditingId(null)} className="text-slate-400 text-xs cursor-pointer">Batal</button>
                                 </div>
                               ) : (
@@ -421,7 +498,7 @@ function App() {
                                   <button onClick={() => startEdit(barang)} className={`${dark ? 'text-slate-500 hover:text-blue-400' : 'text-slate-400 hover:text-blue-600'} transition cursor-pointer`}>
                                     <Pencil size={16} />
                                   </button>
-                                  <button onClick={() => handleDelete(barang.id)} className={`${dark ? 'text-slate-500 hover:text-red-400' : 'text-slate-400 hover:text-red-500'} transition cursor-pointer`}>
+                                  <button onClick={() => handleDelete(barang)} className={`${dark ? 'text-slate-500 hover:text-red-400' : 'text-slate-400 hover:text-red-500'} transition cursor-pointer`}>
                                     <Trash2 size={16} />
                                   </button>
                                 </>
@@ -446,11 +523,11 @@ function App() {
 
                 {renderBulkBar(
                   sudahCurrent.map((b) => b.id),
-                  'Sudah Dibeli',
+                  'sudah',
                 )}
 
                 <div className="flex items-center gap-2 mb-3">
-                  {renderSelectAllCheckbox(sudahCurrent.map((b) => b.id))}
+                  {renderSelectAllCheckbox(sudahCurrent.map((b) => b.id), 'sudah')}
                   {sudahCurrent.length > 0 && (
                     <span className={`text-xs ${dark ? 'text-slate-500' : 'text-slate-400'}`}>Pilih semua</span>
                   )}
@@ -463,7 +540,7 @@ function App() {
                   {sudahCurrent.map((barang) => (
                     <div key={barang.id} className={`${dark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'} rounded-2xl shadow-sm border p-4`}>
                       <div className="flex items-center gap-3">
-                        {renderSelectCheckbox(barang.id)}
+                        {renderSelectCheckbox(barang.id, 'sudah')}
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium ${dark ? 'text-white' : 'text-slate-800'} truncate">{barang.nama_barang}</p>
                           <p className="text-sm font-semibold text-green-600">{formatRupiah(barang.harga_final)}</p>
@@ -484,14 +561,16 @@ function App() {
                                 onChange={(e) => setEditForm((f) => ({ ...f, nama_barang: e.target.value }))}
                                 className={`w-24 border ${dark ? 'border-slate-600' : 'border-slate-200'} rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/30 ${dark ? 'bg-slate-700 text-white' : 'bg-slate-50 text-slate-800'}`}
                               />
-                              <input
-                                type="number"
-                                value={editForm.harga_estimasi}
-                                onChange={(e) => setEditForm((f) => ({ ...f, harga_estimasi: e.target.value }))}
-                                className={`w-20 border ${dark ? 'border-slate-600' : 'border-slate-200'} rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/30 ${dark ? 'bg-slate-700 text-white' : 'bg-slate-50 text-slate-800'}`}
-                                min="0"
-                              />
-                              <button onClick={() => saveEdit(barang.id)} className="text-green-600 text-xs font-semibold cursor-pointer">Simpan</button>
+                              {barang.is_dibeli && (
+                                <input
+                                  type="number"
+                                  value={editForm.harga_final}
+                                  onChange={(e) => setEditForm((f) => ({ ...f, harga_final: e.target.value }))}
+                                  className={`w-20 border ${dark ? 'border-slate-600' : 'border-slate-200'} rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/30 ${dark ? 'bg-slate-700 text-white' : 'bg-slate-50 text-slate-800'}`}
+                                  min="0"
+                                />
+                              )}
+                              <button onClick={() => saveEdit(barang)} className="text-green-600 text-xs font-semibold cursor-pointer">Simpan</button>
                               <button onClick={() => setEditingId(null)} className="text-slate-400 text-xs cursor-pointer">Batal</button>
                             </div>
                           ) : (
@@ -499,7 +578,7 @@ function App() {
                               <button onClick={() => startEdit(barang)} className={`${dark ? 'text-slate-500 hover:text-blue-400' : 'text-slate-400 hover:text-blue-600'} transition cursor-pointer`}>
                                 <Pencil size={16} />
                               </button>
-                              <button onClick={() => handleDelete(barang.id)} className={`${dark ? 'text-slate-500 hover:text-red-400' : 'text-slate-400 hover:text-red-500'} transition cursor-pointer`}>
+                              <button onClick={() => handleDelete(barang)} className={`${dark ? 'text-slate-500 hover:text-red-400' : 'text-slate-400 hover:text-red-500'} transition cursor-pointer`}>
                                 <Trash2 size={16} />
                               </button>
                             </>

@@ -5,11 +5,14 @@ window.Pusher = Pusher
 
 const echo = new Echo({
     broadcaster: 'reverb',
-    key: 'ac46bb33b376bc5828e2', // Sesuai dengan VITE_PUSHER_APP_KEY kamu
-    wsHost: 'backend-belanjaan-production.up.railway.app', // PENTING: Ganti dengan domain asli backend Railway-mu tanpa https:// atau /api
-    wsPort: 443,
+    key: '7zoh9kfmri1bjfxop74c',
+    host: 'backend-belanjaan-production.up.railway.app',
+    port: 443,
+    wsHost: 'backend-belanjaan-production.up.railway.app',
+    wsPort: 80,
     wssPort: 443,
-    forceTLS: true, // Wajib TRUE untuk production web
+    forceTLS: true,
+    encrypted: true,
     enabledTransports: ['ws', 'wss'],
 })
 
