@@ -6,13 +6,13 @@ window.Pusher = Pusher
 const echo = new Echo({
     broadcaster: 'reverb',
     key: '7zoh9kfmri1bjfxop74c',
-    host: 'backend-belanjaan-production.up.railway.app',
-    port: 443,
-    wsHost: 'backend-belanjaan-production.up.railway.app',
-    wsPort: 80,
-    wssPort: 443,
-    forceTLS: true,
-    encrypted: true,
+    host: '127.0.0.1',
+    port: 8080,
+    wsHost: '127.0.0.1',
+    wsPort: 8080,
+    wssPort: 8080,
+    forceTLS: false,
+    encrypted: false,
     enabledTransports: ['ws', 'wss'],
 })
 

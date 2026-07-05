@@ -12,7 +12,7 @@ const toast = Swal.mixin({
   timerProgressBar: true,
 })
 
-const api = axios.create({ baseURL: 'https://backend-belanjaan-production.up.railway.app/api' })
+const api = axios.create({ baseURL: import.meta.env.VITE_API_URL })
 const PER_PAGE = 10
 
 function formatRupiah(n) {
